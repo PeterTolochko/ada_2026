@@ -1,0 +1,49 @@
+# =========================
+# LaTeX artifacts
+# =========================
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.bbl
+*.blg
+*.bcf
+*.run.xml
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+*.nav
+*.snm
+*.vrb
+*.xdv
+*.synctex
+*.acn
+*.acr
+*.alg
+*.glg
+*.glo
+*.gls
+*.ist
+
+# =========================
+# R artifacts
+# =========================
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+.Renviron
+
+# R temporary files
+.Rtmp*
+*.Rcheck/
+
+# =========================
+# macOS
+# =========================
+.DS_Store
+.AppleDouble
+.LSOverride
+._*

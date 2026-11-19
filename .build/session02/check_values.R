@@ -1,0 +1,5 @@
+library(igraph)
+g <- graph_from_data_frame(data.frame(from=c('A','A','B','C','D'),to=c('B','C','C','D','E')),directed=FALSE,vertices=data.frame(name=LETTERS[1:6]))
+print(data.frame(deg=degree(g),harm=harmonic_centrality(g,normalized=TRUE),between=betweenness(g,normalized=FALSE),eig=eigen_centrality(g)$vector))
+print(betweenness(add_edges(g,c('B','D'))));print(eigen_centrality(g)$value)
+gd<-as_directed(g,mode='arbitrary');print(page_rank(gd,weights=NA)$vector)

@@ -1,0 +1,1230 @@
+---
+title: "Social Network Analysis: Practical Workbook"
+subtitle: "Network foundations, igraph, connectivity, and centrality"
+author: "Petro Tolochko"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    number_sections: true
+    code_folding: show
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width = 8, fig.height = 4.5,
+                      fig.align = "center", collapse = TRUE, comment = "#>")
+```
+
+# Getting started
+
+This workbook brings together the practical material for the first two lectures. 
+We use **igraph** and base R. Install igraph once, if needed:
+
+```{r install, eval=FALSE}
+install.packages("igraph")
+```
+
+Load the package whenever you start a new R session:
+
+```{r packages}
+library(igraph)
+```
+
+The main advice example is an undirected network with six actors and five ties. Separate examples introduce directed nominations, weights, and other data structures.
+
+
+# A research question becomes network data
+
+**Question:** who has an advice relationship with whom in a six-person research group?
+
+- **Nodes:** all six members, A–F, including those with no observed ties.
+- **Boundary:** this research group; external advisers are excluded.
+- **Observation window:** the previous four weeks.
+- **Undirected tie:** a confirmed advice relationship, without recording who seeks advice from whom.
+
+Later we use a separate directed version that records nominations. In real data, direction cannot be recovered from an undirected relationship without additional information.
+
+Mathematically, a graph is $G=(V,E)$, with $n=|V|$ nodes and $m=|E|$ ties. Here,
+
+$$
+V=\{A,B,C,D,E,F\},\qquad
+E=\{\{A,B\},\{A,C\},\{B,C\},\{C,D\},\{D,E\}\}.
+$$
+
+The braces in $\{A,B\}$ mean the pair is unordered: A–B and B–A describe the same undirected tie.
+
+```{r data}
+nodes <- data.frame(name = LETTERS[1:6])
+edges <- data.frame(
+  from = c("A", "A", "B", "C", "D"),
+  to   = c("B", "C", "C", "D", "E")
+)
+nodes
+edges
+
+g <- graph_from_data_frame(edges, directed = FALSE, vertices = nodes)
+```
+
+The first two columns contain the endpoints; we call them `from` and `to`. Because `directed = FALSE`, their order does not give the ties a direction. Store each undirected tie once.
+
+
+We keep `g` as the original graph. Give edited graphs different names so that the examples can be compared.
+
+
+# Get to know an igraph object
+
+## Actor and tie attributes
+
+The first column in the node table contains unique IDs. The first two columns in the edge table contain endpoints; additional columns become attributes. The node table keeps F even though F does not appear in the edge table. Look at the two tables: can you find each endpoint in the roster?
+
+```{r intro-tables}
+roster <- nodes
+roster$team <- c("Red", "Red", "Red", "Blue", "Blue", "Blue")
+ties <- edges
+ties$contacts <- c(3, 2, 4, 1, 2)
+g_demo <- graph_from_data_frame(ties, directed = FALSE, vertices = roster)
+roster
+ties
+g_demo
+```
+
+For CSV files, use `read.csv("nodes.csv", colClasses = "character")` and `read.csv("ties.csv", colClasses = "character")` to preserve IDs such as `001`. Put the ID and endpoint columns first, and convert numeric attributes explicitly (e.g. `ties$contacts <- as.numeric(ties$contacts)`). Decide what blank IDs, duplicate records and unknown endpoints mean before building a graph.
+
+## Inspect and select
+
+`V()` selects vertices; `E()` selects edges. Prefer names over numeric positions: indices may change after edits. Use `as_data_frame()` to inspect or export the graph as ordinary tables.
+
+```{r intro-inspect}
+c(actors = vcount(g_demo), ties = ecount(g_demo))
+is_directed(g_demo)
+is_simple(g_demo)   # no loops or parallel edges
+vertex_attr_names(g_demo)
+edge_attr_names(g_demo)
+V(g_demo)[V(g_demo)$team == "Blue"]
+neighbors(g_demo, "C")
+as_data_frame(g_demo, what = "both")
+```
+
+
+# Represent a network as a matrix
+
+Before running the code, write the adjacency matrix using the node order A–F.
+
+For a binary network,
+
+$$
+A_{ij}=\begin{cases}
+1 & \text{if a tie exists from } i \text{ to } j,\\
+0 & \text{otherwise.}
+\end{cases}
+$$
+
+In an undirected graph, $A_{ij}=A_{ji}$, so $A=A^{\mathsf T}$. With no self-loops, the diagonal is zero.
+
+```{r adjacency}
+A <- as_adjacency_matrix(g, sparse = FALSE)
+A
+A["A", "B"]
+A["B", "A"]
+diag(A)
+```
+
+In R, `A["A", "B"]` selects row A and column B. `t(A)` swaps rows and columns.
+
+**Try it:** which matrix entries correspond to C–D? Why does F need both a row and a column?
+
+<details>
+<summary>Answer</summary>
+
+C–D appears at `A["C", "D"]` and `A["D", "C"]`. Each undirected edge appears twice. F's all-zero row and column preserve its membership in the network even though it has no ties.
+
+```{r matrix-check}
+A
+t(A)
+sum(A)                 # Twice the number of undirected ties
+```
+
+A zero in these complete teaching data means no observed relationship. In real data, a missing response should not automatically become a zero.
+
+</details>
+
+
+## Create a graph from the matrix
+
+Rows and columns must refer to the same actors in the same order. For an undirected graph check symmetry. A zero row and column keep an isolate; a missing measurement is not automatically a zero.
+
+```{r intro-matrix}
+g_matrix <- graph_from_adjacency_matrix(A, mode = "undirected", diag = FALSE)
+A
+as_adjacency_matrix(g_matrix, sparse = FALSE)
+```
+
+Use `mode = "directed"` for a sender-by-receiver matrix. For count data, choose between one weighted tie per nonzero cell and one edge per event. The same input gives different graphs:
+
+```{r intro-count-matrix}
+counts <- matrix(c(0, 3, 3, 0), 2, dimnames = list(c("A","B"), c("A","B")))
+one_tie <- graph_from_adjacency_matrix(counts, mode = "undirected", weighted = TRUE)
+three_ties <- graph_from_adjacency_matrix(counts, mode = "undirected", weighted = NULL)
+c(weighted_edges = ecount(one_tie), event_edges = ecount(three_ties))
+E(one_tie)$weight
+```
+
+
+# Manipulate graphs
+
+```{r intro-edit}
+g_added <- add_edges(g, c("B", "D"))
+cd <- get_edge_ids(g, c("C", "D"), error = TRUE)
+g_deleted <- delete_edges(g, cd)
+g_team <- induced_subgraph(g_demo, V(g_demo)[V(g_demo)$team == "Red"])
+g_expanded <- add_vertices(g, 1, name = "G")
+g_without_f <- delete_vertices(g, "F")
+c(original = ecount(g), added = ecount(g_added), deleted = ecount(g_deleted))
+as_data_frame(g_team, what = "both")
+```
+
+An induced subgraph keeps all original ties between the selected actors. Removing F changes the population even though no ties disappear. Removing a tie and removing an actor answer different questions.
+
+
+# Visualise the network
+
+Start with a simple plot:
+
+```{r plot-basic}
+plot(g, vertex.color = "lavender", vertex.label.color = "black",
+     main = "Six-person advice network")
+```
+
+**Discuss:** what does this picture tell us about F? What would we need to know before interpreting F as socially isolated outside this research group?
+
+## Layouts position the actors
+
+A layout is a table of coordinates, with one row for each actor in the graph's order. We will reuse these coordinates to make our comparisons easier to read.
+
+```{r fixed-layout}
+fixed_layout <- rbind(c(0, 1), c(2, 1), c(1, 0),
+                      c(3.8, 0), c(3.8, 1), c(5.6, 0))
+plot(g, layout = fixed_layout, vertex.size = 28,
+     vertex.color = "lavender", vertex.label.color = "black")
+```
+
+The short function below stores these plotting choices so we do not need to repeat them in every example. Its arguments are the graph, a title, and a layout.
+
+```{r plotting-helper}
+plot_advice <- function(network, main = "", layout = fixed_layout) {
+  plot(network, layout = layout, main = main,
+       vertex.size = 28, vertex.color = "lavender",
+       vertex.label.color = "black", vertex.label.cex = 1.2,
+       edge.color = "slategray", edge.arrow.size = 0.5)
+}
+```
+
+
+## Colours, widths, and consistent comparisons
+
+Choose what visual features mean before plotting. Here colour shows team and width shows recorded contact frequency. Position comes from a layout: its distances are not measured social distances. Reuse coordinates when comparing edits to the same set of actors.
+
+```{r intro-plot}
+team_colours <- c(Red = "#CF7777", Blue = "#729CC5")
+set.seed(42)
+xy <- layout_with_fr(g_demo, weights = NA)
+V(g_demo)$color <- unname(team_colours[V(g_demo)$team])
+plot(g_demo, layout = xy, vertex.size = 25, vertex.label.color = "black",
+     edge.width = E(g_demo)$contacts, main = "Advice ties by team")
+legend("bottomleft", legend = names(team_colours), pt.bg = team_colours,
+       pch = 21, bty = "n", cex = 0.9)
+```
+
+```{r intro-compare, fig.width=9}
+op <- par(mfrow = c(1, 2))
+plot(g, layout = xy, main = "Original")
+plot(g_added, layout = xy, main = "After adding B-D")
+par(op)
+```
+
+**Checkpoint:** Locate F in both plots. Which tie changed? What do colours and widths mean in the first plot? Why might the same graph look different with `layout_in_circle(g_demo)`?
+
+
+## Same graph, different layouts
+
+```{r layouts, fig.width=10, fig.height=4.5}
+par(mfrow = c(1, 2))
+plot_advice(g, "Fixed teaching layout")
+plot_advice(g, "Circular layout", layout = layout_in_circle(g))
+par(mfrow = c(1, 1))
+```
+
+Which visual impressions change? Which numerical properties remain fixed? The distance between actors on the page does not automatically measure social distance.
+
+
+# Exercise: build a network from the class
+
+## What are we recording?
+
+**Research question:** who has discussed this course with whom?
+
+- **Actors:** Short IDs such as S01 and S02 instead of names.
+- **Tie:** two students have had a conversation about the. Saying "hello" only does not count.
+- **Time window:** from the start of this class.
+- **Direction:** undirected, because we record a conversation between two people, not who started it.
+- **Weight:** binary. A pair either had a discussion or did not; repeated discussions do not create extra ties.
+
+We will use a different graph, `g_class`, so our classroom data do not replace the six-person advice network used elsewhere in this workbook.
+
+A student who reports no discussion has no observed ties. 
+
+
+## Enter the data directly in R
+
+
+```{r class-roster}
+class_nodes <- data.frame(
+  name = c("S01", "S02", "S03", "S04", "S05", "S06", "S07", "S08"),
+  table = c("1", "1", "1", "1", "2", "2", "3", "3")
+)
+class_nodes
+```
+
+Next, enter one row per discussion pair. The first entry in `from` pairs with the first entry in `to`, the second with the second, and so on.
+
+```{r class-pairs}
+class_ties <- data.frame(
+  from = c("S01", "S01", "S02", "S03", "S04", "S05", "S06"),
+  to   = c("S02", "S03", "S03", "S04", "S05", "S06", "S07")
+)
+class_ties
+```
+
+Look through the tables together. Can you find every endpoint in the roster? Has any pair been recorded twice? Does a blank row mean a missing answer or simply an unused spreadsheet row? Remove unused rows before importing.
+
+In the fictional example, S08 has no discussion partners but still belongs in `class_nodes`.
+
+## Alternatively, we enter the same tables in a spreadsheet
+
+
+```{r class-csv-import, eval=FALSE}
+class_nodes <- read.csv("data/classroom_nodes.csv", colClasses = "character")
+class_ties <- read.csv("data/classroom_ties.csv", colClasses = "character")
+class_nodes
+class_ties
+```
+
+When knitting this notebook, paths start from its `code/` folder. If you run the commands in the R console, set your working directory to `code/` first, or choose **Session → Set Working Directory → To Source File Location** in RStudio with this notebook open. The `data` folder should then be visible in the Files pane.
+
+## Build the classroom graph
+
+```{r class-build}
+g_class <- graph_from_data_frame(
+  class_ties,
+  directed = FALSE,
+  vertices = class_nodes
+)
+g_class
+```
+
+
+```{r class-inspect}
+V(g_class)$name
+E(g_class)
+vcount(g_class)
+ecount(g_class)
+as_data_frame(g_class, what = "vertices")
+as_data_frame(g_class, what = "edges")
+```
+
+
+## Draw the network
+
+Choose coordinates once, so the actors stay in the same places when we compare edits.
+
+```{r class-plot}
+set.seed(666)
+class_layout <- layout_with_fr(g_class)
+plot(g_class, layout = class_layout,
+     vertex.label = V(g_class)$name,
+     vertex.color = "lavender", vertex.size = 24,
+     vertex.label.color = "black", vertex.label.cex = 0.9,
+     edge.color = "slategray",
+     main = "Discussion network")
+```
+
+To show the seating tables with colour:
+
+```{r class-colours}
+V(g_class)$color <- ifelse(V(g_class)$table == "1", "skyblue", "orange")
+plot(g_class, layout = class_layout, vertex.size = 24,
+     vertex.label.color = "black", vertex.label.cex = 0.9,
+     edge.color = "slategray", main = "Discussion network by seating table")
+legend("bottomleft", legend = c("Table 1", "Other tables"),
+       pt.bg = c("skyblue", "orange"), pch = 21, bty = "n", cex = 0.9)
+```
+
+This example distinguishes table 1 from all other tables. Adapt the colours and legend to your seating arrangement. Nearness on the plot comes from the layout; the colours show the recorded seating attribute.
+
+## Add a discussion pair
+
+Suppose two students have a new discussion. Which row would you add to the pair table? What would change in the picture?
+
+In the fictional example, S02 and S06 are not yet connected. For the classroom data, replace these IDs with two students in your roster who are not already connected. Adding an existing pair would create a second edge rather than a new relationship.
+
+```{r class-add-tie}
+g_class_plus <- add_edges(g_class, c("S02", "S06"))
+as_data_frame(g_class_plus, what = "edges")
+```
+
+Keep the original graph for comparison. Both graphs still contain the same students in the same order, so we can reuse their coordinates.
+
+```{r class-compare, fig.width=10, fig.height=5}
+par(mfrow = c(1, 2))
+plot(g_class, layout = class_layout, vertex.size = 24,
+     vertex.label.color = "black", edge.color = "slategray",
+     main = "Before the new discussion")
+plot(g_class_plus, layout = class_layout, vertex.size = 24,
+     vertex.label.color = "black", edge.color = "slategray",
+     main = "After the new discussion")
+par(mfrow = c(1, 1))
+```
+
+**Discuss:** which two students gained a tie? Did the number of students change?
+
+## Remove a tie entered by mistake
+
+Suppose the S03–S04 pair was recorded incorrectly. Find its edge and remove it from a copy. For your data, choose an existing pair from the printed edge table.
+
+```{r class-delete-tie}
+class_edge <- get_edge_ids(g_class, c("S03", "S04"))
+g_class_corrected <- delete_edges(g_class, class_edge)
+as_data_frame(g_class_corrected, what = "edges")
+plot(g_class_corrected, layout = class_layout, vertex.size = 24,
+     vertex.label.color = "black", edge.color = "slategray",
+     main = "After removing an incorrect pair")
+```
+
+The students remain in the graph. Only the selected relationship is removed. Does this deletion split a group apart, or is there another route between the two students?
+
+## Select one seating group
+
+An induced subgraph keeps selected students and all the observed ties between them.
+
+```{r class-subgraph}
+class_table1 <- V(g_class)[V(g_class)$table == "1"]
+g_class_table1 <- induced_subgraph(g_class, class_table1)
+as_data_frame(g_class_table1, what = "both")
+plot(g_class_table1, layout = layout_in_circle(g_class_table1),
+     vertex.size = 26, vertex.label.color = "black",
+     edge.color = "slategray", main = "Students at table 1")
+```
+
+Choose a table represented in your roster. This graph has a different set of actors, so give it a new layout rather than reuse the full-class coordinates.
+
+**Discuss:** which ties disappear when we focus on one table? Does a student who appears disconnected in the smaller graph necessarily have no discussion partners in the whole class?
+
+## Remove a student from a copy
+
+What changes if we analyse a smaller group? Try removing S03 from a copy of the original graph; choose an ID from your own roster when using the classroom data.
+
+```{r class-delete-student}
+g_class_without_s03 <- delete_vertices(g_class, "S03")
+as_data_frame(g_class_without_s03, what = "both")
+plot(g_class_without_s03, layout = layout_in_circle(g_class_without_s03),
+     vertex.size = 24, vertex.label.color = "black",
+     edge.color = "slategray", main = "A smaller set of students")
+```
+
+Removing a vertex also removes every tie attached to it. Compare this with removing a single edge. The original `g_class` has not changed.
+
+## Your turn
+
+Using the graph of the discussions actually collected:
+
+1. Find a student and display their discussion partners using `neighbors()`.
+2. Create a copy with one new pair, using IDs from your roster. Show the change in a plot.
+3. Select a seating group and list the students and ties retained.
+4. Explain what an isolated student means in this particular graph. Why does it not establish that they have no friends or no contacts outside the exercise?
+
+<details>
+<summary>Example commands</summary>
+
+Replace the sample IDs and table number with values from your data. Pick a new pair that is not already in the edge table.
+
+```{r class-student-exercise, eval=FALSE}
+neighbors(g_class, "S01")
+my_graph <- add_edges(g_class, c("S01", "S07"))
+plot(my_graph, layout = class_layout)
+my_group <- induced_subgraph(g_class, V(g_class)[V(g_class)$table == "2"])
+as_data_frame(my_group, what = "both")
+```
+
+The isolate has no recorded discussion partners within the stated time window and population. It does not describe all of that student's social relationships.
+
+</details>
+
+The remaining examples return to the synthetic advice network `g`. You can later apply degree, density, and centrality functions to `g_class` too, but first make sure that its actors and ties match what was recorded.
+
+# Other data structures and cleaning decisions
+
+**Small examples:** `make_ring(5)` creates a five-actor cycle. A named two-column character matrix can be passed to `graph_from_edgelist()`. Actors missing from that matrix still need to be added separately.
+
+```{r intro-other-inputs}
+g_list <- graph_from_edgelist(as.matrix(edges[c("from", "to")]), directed = FALSE)
+g_list <- add_vertices(g_list, 1, name = "F")
+g_ring <- make_ring(5)
+```
+
+**Actor-by-event data:** A rectangular matrix represents two kinds of vertices. Use a bipartite graph for attendance. Attending the same event does not itself establish friendship.
+
+```{r intro-bipartite}
+attendance <- matrix(c(1, 1, 0, 0, 1, 1), nrow = 3,
+                     dimnames = list(c("A","B","C"), c("Event 1","Event 2")))
+g_events <- graph_from_biadjacency_matrix(attendance)
+as_data_frame(g_events, what = "both")
+```
+
+**Repeated events and self-ties:** Inspect the raw graph before simplifying it. Here duplicate endpoints are two contact records, and the self-tie is excluded by the definition of interpersonal contact. Sum counts only if the rows represent distinct events; accidental duplicate rows should be corrected instead.
+
+```{r intro-clean}
+events <- data.frame(from = c("A","A","B"), to = c("B","B","B"),
+                     contacts = c(2, 3, 1))
+g_events_raw <- graph_from_data_frame(events, directed = FALSE, vertices = roster)
+is_simple(g_events_raw)
+g_clean <- simplify(g_events_raw, remove.multiple = TRUE, remove.loops = TRUE,
+                    edge.attr.comb = list(contacts = "sum", "ignore"))
+as_data_frame(g_clean, what = "edges")
+```
+
+**Save for reuse:** `saveRDS(g_demo, "advice_graph.rds")` preserves the R graph object. `write_graph(g_demo, "advice_graph.graphml", format = "graphml")` exports this graph for use in other tools. Use `as_data_frame(g_demo, what = "both")` when you need two portable tables, including the roster.
+
+
+# Degree and average degree
+
+For an undirected graph, node $i$'s degree is
+
+$$k_i=\sum_{j=1}^{n} A_{ij}.$$
+
+Keep the row $i$ fixed and add across all possible partners $j$. For C, this gives $1+1+0+1+0+0=3$.
+
+```{r degree}
+data.frame(node = V(g)$name,
+           matrix_row_sum = rowSums(A),
+           igraph_degree = degree(g))
+```
+
+Every undirected tie contributes to two actors' degrees. Therefore,
+
+$$\sum_i k_i=2m,\qquad \bar{k}=\frac{1}{n}\sum_i k_i=\frac{2m}{n}.$$
+
+```{r degree-total}
+n <- vcount(g)
+m <- ecount(g)
+c(sum_degree = sum(degree(g)), twice_ties = 2 * m,
+  mean_degree = mean(degree(g)), formula_mean = 2 * m / n)
+```
+
+**Interpret:** C has the most ties in this group. Does this establish that C gives the best advice?
+
+
+## Degree as a share of possible neighbours
+
+An actor can have at most $n-1$ neighbours when self-ties are excluded. Normalised degree is the share of those possible neighbours that are connected:
+
+$$C_D(i)=\frac{k_i}{n-1}.$$
+
+```{r normalised-degree}
+data.frame(node = V(g)$name, degree = degree(g),
+           share_of_possible_neighbours = degree(g) / (vcount(g) - 1))
+```
+
+C has three neighbours out of five possible, so its normalised degree is 0.6. This rescales degree; it does not measure the quality of the advice C gives.
+
+
+# Density and adding a relationship
+
+Each actor has $n-1$ possible partners. Counting $n(n-1)$ counts each undirected pair twice, so there are $n(n-1)/2$ possible undirected ties.
+
+$$D=\frac{m}{n(n-1)/2}=\frac{2m}{n(n-1)}.$$
+
+**Predict:** with six actors and five ties, what are the denominator and the density?
+
+```{r density}
+possible_ties <- n * (n - 1) / 2
+c(nodes = n, ties = m, possible_ties = possible_ties,
+  density_by_hand = m / possible_ties,
+  density_igraph = edge_density(g, loops = FALSE))
+```
+
+Now predict what changes if E–F is added: which degrees change, how much does density increase, and can F reach the rest of the group?
+
+```{r add-tie}
+edges_plus <- rbind(edges, data.frame(from = "E", to = "F"))
+g_plus <- graph_from_data_frame(edges_plus, directed = FALSE,
+                                vertices = nodes)
+```
+
+**Complete and run these lines:**
+
+```{r add-tie-exercise, eval=FALSE}
+degree(____)
+edge_density(____, loops = FALSE)
+plot_advice(____, "After adding E-F")
+```
+
+<details>
+<summary>Answer and interpretation</summary>
+
+```{r add-tie-answer}
+data.frame(node = V(g)$name, before = degree(g), after = degree(g_plus))
+c(before = edge_density(g), after = edge_density(g_plus))
+plot_advice(g_plus, "After adding E-F")
+```
+
+E's degree increases from 1 to 2, and F's from 0 to 1. There are six ties, so density is $6/15=0.4$. F now has a route to every other actor. This describes possible routes through ties, not proof that advice actually travels along them.
+
+</details>
+
+
+# What happens when an isolate is omitted?
+
+What happens if we omit the node list? Predict the reported node count and density.
+
+```{r isolate}
+g_without_node_list <- graph_from_data_frame(edges, directed = FALSE)
+c(nodes = vcount(g_without_node_list),
+  density = edge_density(g_without_node_list))
+```
+
+**Explain:** why the density changes even though no relationship was added.
+
+<details>
+<summary>Answer</summary>
+
+F never appears in the edge list, so igraph cannot infer that F belongs to the group. The reported node count falls from six to five. The number of possible ties falls from 15 to 10, raising density from $5/15$ to $5/10$. Always define the node population separately when isolates are possible.
+
+</details>
+
+
+## Density and network size
+
+For simple undirected networks,
+
+$$D=\frac{2m}{n(n-1)}=\frac{\bar{k}}{n-1}.$$
+
+A cycle connects each actor to two neighbours. Create cycles of different sizes and compare their mean degrees and densities:
+
+```{r density-size}
+cycle_6 <- make_ring(6, directed = FALSE)
+cycle_20 <- make_ring(20, directed = FALSE)
+cycle_100 <- make_ring(100, directed = FALSE)
+data.frame(
+  nodes = c(6, 20, 100),
+  mean_degree = c(mean(degree(cycle_6)), mean(degree(cycle_20)),
+                  mean(degree(cycle_100))),
+  density = c(edge_density(cycle_6), edge_density(cycle_20),
+              edge_density(cycle_100))
+)
+```
+
+**Discuss:** each actor has two contacts in every graph. Why does density fall? What would be misleading about describing the largest group as having fewer contacts per person?
+
+
+# Directed nominations: who names whom?
+
+Return to the **original five ties**. In this directed example, `from` is the advice seeker and `to` is the person named as a source. A nomination by A does not imply a reciprocal nomination by B.
+
+```{r directed}
+g_dir <- graph_from_data_frame(edges, directed = TRUE, vertices = nodes)
+plot_advice(g_dir, "Directed nominations: seeker to source")
+A_dir <- as_adjacency_matrix(g_dir, sparse = FALSE)
+A_dir
+neighbors(g_dir, "C", mode = "in")
+neighbors(g_dir, "C", mode = "out")
+```
+
+Rows send ties; columns receive ties:
+
+$$k_i^{\mathrm{out}}=\sum_j A_{ij},\qquad
+k_i^{\mathrm{in}}=\sum_j A_{ji}.$$
+
+**Predict:** what do the row sum and column sum for C tell us?
+
+```{r directed-degree}
+data.frame(node = V(g_dir)$name,
+           out_matrix = rowSums(A_dir),
+           out_degree = degree(g_dir, mode = "out"),
+           in_matrix = colSums(A_dir),
+           in_degree = degree(g_dir, mode = "in"))
+```
+
+Unlike an undirected pair, A → B and B → A are distinct possible ties. Therefore,
+
+$$D_{\mathrm{directed}}=\frac{m}{n(n-1)},\qquad
+\sum_i k_i^{\mathrm{out}}=\sum_i k_i^{\mathrm{in}}=m.$$
+
+```{r directed-density}
+c(directed_density = edge_density(g_dir, loops = FALSE),
+  formula = ecount(g_dir) / (vcount(g_dir) * (vcount(g_dir) - 1)),
+  sum_out_degree = sum(degree(g_dir, mode = "out")),
+  sum_in_degree = sum(degree(g_dir, mode = "in")))
+```
+
+<details>
+<summary>Answer and interpretation</summary>
+
+C has out-degree 1 and in-degree 2. C seeks advice from D, while A and B name C. C is the most frequently nominated source in these data; this does not establish expertise or causal influence. Directed density is $5/30=1/6$.
+
+</details>
+
+**Challenge:** reverse all arrows. Predict the effect on in-degree, out-degree, and density before running this code.
+
+```{r reverse}
+reversed_edges <- data.frame(from = edges$to, to = edges$from)
+g_reverse <- graph_from_data_frame(reversed_edges, directed = TRUE,
+                                   vertices = nodes)
+data.frame(node = V(g_dir)$name,
+           original_in = degree(g_dir, mode = "in"),
+           reversed_out = degree(g_reverse, mode = "out"))
+c(original_density = edge_density(g_dir),
+  reversed_density = edge_density(g_reverse))
+```
+
+
+# Weighted ties: partners versus interactions
+
+Suppose the directed nominations also include a count of advice interactions.
+
+```{r weights}
+weighted_edges <- edges
+weighted_edges$weight <- c(3, 1, 2, 4, 1)
+g_weighted <- graph_from_data_frame(weighted_edges, directed = TRUE,
+                                   vertices = nodes)
+W <- as_adjacency_matrix(g_weighted, attr = "weight", sparse = FALSE)
+W
+```
+
+Binarising these counts gives $A_{ij}=\mathbf{1}\{W_{ij}>0\}$. Degree counts distinct partners; strength sums interaction counts:
+
+$$k_i^{\mathrm{out}}=\sum_j \mathbf{1}\{W_{ij}>0\},\qquad
+s_i^{\mathrm{out}}=\sum_j W_{ij}.$$
+
+```{r strength}
+data.frame(node = V(g_weighted)$name,
+           out_degree = degree(g_weighted, mode = "out"),
+           out_strength = strength(g_weighted, mode = "out"))
+```
+
+**Interpret:** A has two outgoing ties but four interactions. Would two people with equal degree necessarily have equal interaction totals? Binary density still counts occupied pairs, not the sum of these weights.
+
+
+# Matrix multiplication and indirect connections
+
+## Vectors and sums
+
+A vector attaches one value to each actor. Let only A have value 1:
+
+```{r vector}
+x <- setNames(c(1, 0, 0, 0, 0, 0), V(g)$name)
+x
+A %*% x
+```
+
+The formula is $(A\mathbf{x})_i=\sum_j A_{ij}x_j$. In this undirected graph, the product identifies A's neighbours. It is an aggregation, not yet a probabilistic model of diffusion.
+
+Recall the degree identity:
+
+```{r degree-matrix}
+ones <- rep(1, nrow(A))
+data.frame(node = rownames(A),
+           matrix_degree = as.numeric(A %*% ones),
+           package_degree = degree(g))
+```
+
+## Combine two tables: students, courses, and instructors
+
+Suppose students A and B take courses X, Y, and Z. Matrix `M` records enrolment; matrix `N` counts the teaching sessions that instructors U and V give in each course.
+
+```{r composition-data}
+M <- matrix(c(1, 1, 0,
+              0, 1, 1), nrow = 2, byrow = TRUE,
+            dimnames = list(c("A", "B"), c("X", "Y", "Z")))
+N <- matrix(c(2, 0,
+              1, 3,
+              0, 1), nrow = 3, byrow = TRUE,
+            dimnames = list(c("X", "Y", "Z"), c("U", "V")))
+M
+N
+```
+
+To find A's scheduled exposure to U, take A's row from `M` and U's column from `N`. Match entries course by course, multiply, and add:
+
+- A and U: $1\times2+1\times1+0\times0=3$.
+- A and V: $1\times0+1\times3+0\times1=3$.
+- B and U: $0\times2+1\times1+1\times0=1$.
+- B and V: $0\times0+1\times3+1\times1=4$.
+
+```{r composition-product}
+M %*% N
+```
+
+The result is a student-by-instructor table. The course columns in `M` must match the course rows in `N`, including their order. This describes scheduled exposure, not actual attendance or learning.
+
+## Two-step walks
+
+$$ (A^2)_{ij}=\sum_k A_{ik}A_{kj}. $$
+
+Each intermediate actor contributes 1 if both steps exist. **Predict** the entries AA, AB, AD, and AE before running:
+
+```{r two-step}
+A2 <- A %*% A
+A2
+c(AA = A2["A", "A"], AB = A2["A", "B"],
+  AD = A2["A", "D"], AE = A2["A", "E"])
+```
+
+**Important R distinction:** `A^2` squares each entry separately. `%*%` performs matrix multiplication. For binary adjacency, `A^2` equals `A`.
+
+```{r multiplication-check}
+A^2
+A
+```
+
+**Explain:** why does a return walk A–B–A count in `A2`? Why does a zero for AE not rule out reachability?
+
+<details>
+<summary>Answer</summary>
+
+AA = 2 (A–B–A and A–C–A); AB = 1 (A–C–B); AD = 1 (A–C–D); AE = 0. Matrix multiplication permits repeated nodes, so it counts **walks**, not only simple paths. A can still reach E in three steps.
+
+```{r three-step}
+A3 <- A2 %*% A
+A3["A", "E"]
+```
+
+</details>
+
+
+# Distances, components, and bridges
+
+For distinct actors, shortest distance is the first length with a positive walk count. If no path exists, distance is infinite. In practice, use graph-search routines rather than large matrix powers.
+
+```{r distances}
+Delta <- distances(g, mode = "all", weights = NA)
+Delta
+components(g)$membership
+components(g)$csize
+```
+
+`weights = NA` explicitly requests unweighted distances. It prevents an accidental `weight` attribute from being interpreted as a length.
+
+**Questions:**
+
+1. What are `Delta["A", "E"]` and `Delta["A", "F"]`?
+2. Why is F a component rather than an observation to discard?
+3. Which ties are bridges, and which actors are articulation points?
+
+```{r bridges}
+bridge_edges <- bridges(g)
+as_edgelist(g)[as.integer(bridge_edges), , drop = FALSE]
+as_ids(articulation_points(g))
+```
+
+<details>
+<summary>Answer</summary>
+
+A–E distance is 3. A–F distance is infinite. The two components are {A,B,C,D,E} and {F}. C–D and D–E are bridges; C and D are articulation points. These refer to the observed undirected graph and its stated boundary.
+
+</details>
+
+
+## Remove a tie: which deletion splits the group?
+
+Compare removing A–B with removing C–D. Predict which deletion separates previously connected actors.
+
+```{r bridge-deletions}
+edges_no_ab <- edges[!(edges$from == "A" & edges$to == "B"), ]
+edges_no_cd <- edges[!(edges$from == "C" & edges$to == "D"), ]
+g_no_ab <- graph_from_data_frame(edges_no_ab, directed = FALSE,
+                                 vertices = nodes)
+g_no_cd <- graph_from_data_frame(edges_no_cd, directed = FALSE,
+                                 vertices = nodes)
+par(mfrow = c(1, 2))
+plot_advice(g_no_ab, "Remove A-B")
+plot_advice(g_no_cd, "Remove C-D")
+par(mfrow = c(1, 1))
+data.frame(version = c("Original", "Remove A-B", "Remove C-D"),
+           components = c(components(g)$no, components(g_no_ab)$no,
+                          components(g_no_cd)$no),
+           density = c(edge_density(g), edge_density(g_no_ab),
+                       edge_density(g_no_cd)))
+```
+
+A **component** is a group of nodes connected by paths, with no path to nodes outside that group. An isolate is a component of size one.
+
+Both deletions produce the same density, but only removing C–D splits the five-person connected group. C–D is a **bridge**. This can motivate a study of organisational bottlenecks; actual vulnerability also depends on unobserved contacts and the possibility of forming new ties.
+
+
+## Directed connectivity
+
+A **weak component** groups actors connected when we ignore the arrows. Within a **strong component**, every actor can reach every other actor by following the arrows.
+
+```{r directed-components}
+components(g_dir, mode = "weak")$membership
+components(g_dir, mode = "strong")$membership
+distances(g_dir, mode = "out", weights = NA)
+```
+
+Explain why A can reach E along nomination arrows, while E cannot reach A. What would `mode = "in"` measure instead?
+
+
+# Compare centrality measures
+
+## Closeness: fewer steps to everyone else
+
+The connected-network formula $(n-1)/\sum_{j\ne i}d(i,j)$ assumes finite distances to all others. Our graph has an isolate. We use harmonic centrality to retain the full population.
+
+For a clearly defined **connected subgraph**, conventional closeness is useful:
+
+```{r connected-closeness}
+g_connected <- induced_subgraph(g, vids = LETTERS[1:5])
+closeness(g_connected, normalized = TRUE, weights = NA)
+```
+
+Here $n=5$, and C's closeness is $4/5=0.8$. This is a different measure and population from full-graph harmonic centrality. Igraph's closeness omits unreachable actors; do not silently compare that output as if all original actors were reachable.
+
+
+## Harmonic centrality: give more credit to nearby actors
+
+A direct neighbour contributes 1, an actor two steps away contributes 1/2, and an unreachable actor contributes zero. Add these contributions and divide by the number of other actors.
+
+$$C_H(i)=\frac1{n-1}\sum_{j\ne i}\frac1{d(i,j)},\qquad 1/\infty=0.$$
+
+Use the full six-person population, so the normalising denominator is 5. Exclude the diagonal: self-distance is zero, and its reciprocal must not enter the sum.
+
+```{r harmonic}
+inverse_distance <- 1 / Delta
+diag(inverse_distance) <- 0
+harmonic_manual <- rowSums(inverse_distance) / (vcount(g) - 1)
+harmonic_package <- harmonic_centrality(
+  g, mode = "all", normalized = TRUE, weights = NA
+)
+data.frame(node = V(g)$name, manual = harmonic_manual,
+           igraph = harmonic_package)
+```
+
+**Predict:** why should C score above D, and why should F score zero?
+
+## Betweenness: participation in shortest routes
+
+Betweenness asks who sits on shortest routes between other actors. On the route A–C–D–E, C and D each receive credit for connecting A to E. Endpoints do not receive credit for that pair. If there are two equally short routes, actors on each route share the credit. The formula adds these contributions:
+
+$$B(i)=\sum_{\substack{s<t\\s,t\ne i}}\frac{\sigma_{st}(i)}{\sigma_{st}}.$$
+
+$\sigma_{st}$ counts all shortest routes between actors $s$ and $t$; $\sigma_{st}(i)$ counts those passing through actor $i$. Unreachable pairs contribute zero. We use unordered endpoint pairs and **raw** undirected betweenness here.
+
+## Eigenvector centrality: whom are you connected to?
+
+A and D each have two contacts. A knows B and C, who both have several contacts. D knows C and E, and E has only one contact. Eigenvector centrality gives more credit for being connected to actors who themselves score highly.
+
+The table below puts these different ideas side by side.
+
+```{r centrality-table}
+scores <- data.frame(
+  node = V(g)$name,
+  degree = degree(g),
+  harmonic = harmonic_package,
+  betweenness = betweenness(g, directed = FALSE,
+                            normalized = FALSE, weights = NA),
+  eigenvector = eigen_centrality(g, directed = FALSE,
+                                 weights = NA)$vector
+)
+knitr::kable(scores, digits = 3, row.names = FALSE)
+```
+
+**Discuss:** A and D have equal degree. Why can D have higher betweenness but A higher eigenvector centrality? Compare actors **within** columns; the columns have different scales.
+
+<details>
+<summary>Answer and normalisation</summary>
+
+D lies between E and each of A, B, and C. A lies on no shortest path between other actors, but connects to B and C, which receive relatively high recursive scores. These represent different structural positions.
+
+C's harmonic score is $(1+1+1+1/2+0)/5=0.7$; D's is 0.6. C's raw betweenness is 4, from the pairs {A,D}, {A,E}, {B,D}, {B,E}. F receives zero on these measures.
+
+For six nodes, normalised undirected betweenness divides by $\binom{5}{2}=10$:
+
+```{r normalised-betweenness}
+c(raw_C = scores$betweenness[scores$node == "C"],
+  normalized_C = betweenness(g, directed = FALSE,
+                             normalized = TRUE, weights = NA)["C"])
+```
+
+</details>
+
+
+# Add an alternative route: what changes?
+
+Add B–D, leaving every original actor and tie in place.
+
+**Predict first:** does C's degree change? Does C retain the same brokerage? Is C still an articulation point? Is D?
+
+```{r alternative-route}
+g_alt <- add_edges(g, c("B", "D"))
+par(mfrow = c(1, 2))
+plot_advice(g, "Original")
+plot_advice(g_alt, "With B-D")
+par(mfrow = c(1, 1))
+```
+
+Try calculating the before-and-after measures yourself:
+
+```{r perturbation-exercise, eval=FALSE}
+degree(g_alt)
+betweenness(g_alt, directed = FALSE, normalized = FALSE, weights = NA)
+articulation_points(g_alt)
+```
+
+<details>
+<summary>Answer and comparison</summary>
+
+```{r perturbation-answer}
+route_comparison <- data.frame(
+  node = V(g)$name,
+  degree_before = degree(g),
+  degree_after = degree(g_alt),
+  brokerage_before = betweenness(g, directed = FALSE, weights = NA),
+  brokerage_after = betweenness(g_alt, directed = FALSE, weights = NA)
+)
+knitr::kable(route_comparison, row.names = FALSE)
+as_ids(articulation_points(g_alt))
+```
+
+C's degree remains 3, while its raw betweenness falls from 4 to 1. B provides an alternative route between the left side and D. D still separates E from the rest; C is no longer an articulation point.
+
+C retains some betweenness because it participates in shortest routes from A to D and E, splitting these contributions with B. Raw scores are now B = 1, C = 1, D = 3, and zero for the other actors.
+
+</details>
+
+**Write three sentences:** describe one actor's social position with two measures, explain why the measures differ, and name one conclusion they do not establish. A high centrality score alone is not evidence of causal influence.
+
+
+# Apply the ideas: discussion across groups
+
+Suppose A, B, and C share one political position, and D, E, and F share another. In this hypothetical example, edges record discussion, not agreement.
+
+```{r political-groups}
+position <- setNames(c("Group 1", "Group 1", "Group 1",
+                       "Group 2", "Group 2", "Group 2"), nodes$name)
+discussions <- as_data_frame(g, what = "edges")
+discussions$cross_group <- unname(position[discussions$from] !=
+                                  position[discussions$to])
+discussions
+mean(discussions$cross_group)
+```
+
+**Discuss:** there are equally many actors in each group, but only one of five ties crosses the division. What can ties tell us that group counts alone cannot? Why might cross-group discussion still involve conflict?
+
+The observed share of cross-group ties is descriptive. Without a comparison model, it does not by itself establish avoidance, and a static graph cannot distinguish selection from social influence.
+
+
+# PageRank: following nominations
+
+In-degree counts how many people name an actor as an advice source. PageRank also considers where the nominations come from and how attention is shared across outgoing ties.
+
+Imagine moving through `g_dir` by following nomination arrows. At each actor, choose one of their outgoing nominations. Occasionally jump to a random actor. PageRank describes where this process spends its time.
+
+```{r pagerank-interpretation}
+page_scores <- page_rank(g_dir, damping = 0.85, weights = NA)$vector
+data.frame(node = V(g_dir)$name,
+           incoming_nominations = degree(g_dir, mode = "in"),
+           PageRank = round(page_scores, 3))
+```
+
+**Interpret:** C has the highest in-degree, but E has the highest PageRank. Following the arrows can take you from A or B through C, then D, then E. Why does this let E receive attention despite having only one incoming nomination? Does this prove that E controls communication?
+
+
+# Optional mathematics: recursive scores and eigenvectors
+
+## A repeated calculation
+
+Start with equal values. The update $\mathbf{x}^{(t+1)}\propto A\mathbf{x}^{(t)}$ replaces each actor's score with the sum of its neighbours' scores, then rescales the vector.
+
+```{r power-iteration}
+score <- rep(1, nrow(A))
+history <- matrix(NA_real_, nrow = 8, ncol = nrow(A),
+                  dimnames = list(paste0("step_", 1:8), rownames(A)))
+for (step in seq_len(nrow(history))) {
+  score <- as.numeric(A %*% score)
+  score <- score / max(score)
+  history[step, ] <- score
+}
+knitr::kable(history, digits = 3)
+```
+
+Our nontrivial component contains a triangle, so ordinary power iteration converges here. It can oscillate on bipartite graphs. This is a numerical procedure with conditions, not a guarantee for every network.
+
+## The eigenvector equation
+
+At convergence, multiplication changes scale but not direction:
+
+$$A\mathbf{x}=\lambda\mathbf{x}.$$
+
+```{r eigen-decomposition}
+eig <- eigen(A, symmetric = TRUE)
+lambda <- eig$values[1]
+x_eigen <- eig$vectors[, 1]
+# The sign and scale of an eigenvector are arbitrary.
+if (sum(x_eigen) < 0) x_eigen <- -x_eigen
+x_eigen <- x_eigen / max(x_eigen)
+names(x_eigen) <- rownames(A)
+lambda
+x_eigen
+```
+
+An eigenvector is useful as a centrality score when chosen to be nonnegative and associated with the leading eigenvalue. Other eigenvectors are not alternative popularity rankings.
+
+```{r eigen-check}
+round(A %*% x_eigen, 3)
+round(lambda * x_eigen, 3)
+data.frame(node = rownames(A), matrix_solution = x_eigen,
+           igraph_solution = eigen_centrality(g, weights = NA)$vector)
+```
+
+The two calculations give the same values to three decimal places. Here $\lambda\approx2.214$, and C has score 1 after normalisation. A and B each score about 0.824, while D scores about 0.567.
+
+
+# Optional mathematics: transpose and PageRank
+
+## First check the direction convention
+
+In the directed nomination network, $A_{ij}=1$ means $i$ names $j$ as an advice source. Incoming recursive prestige uses $A^{\mathsf T}$.
+
+```{r directed-2}
+x_demo <- setNames(c(1, 2, 4, 0, 0, 0), rownames(A_dir))
+data.frame(node = rownames(A_dir),
+           outgoing_neighbour_values = as.numeric(A_dir %*% x_demo),
+           values_received = as.numeric(t(A_dir) %*% x_demo))
+```
+
+This directed graph is acyclic. Its adjacency eigenvalues are zero, so positive-eigenvalue adjacency prestige is not a meaningful ranking here. We use PageRank instead.
+
+## Construct a transition matrix
+
+Each actor splits attention equally across its outgoing neighbours. An actor with no outgoing ties gets a uniform row in our model. This models following nomination arrows, not necessarily the movement of advice itself.
+
+$$P_{ij}=A_{ij}/k_i^{\mathrm{out}}\quad\text{when } k_i^{\mathrm{out}}>0.$$
+
+```{r transition}
+n_dir <- nrow(A_dir)
+out_degree <- rowSums(A_dir)
+P <- matrix(0, n_dir, n_dir, dimnames = dimnames(A_dir))
+for (i in seq_len(n_dir)) {
+  if (out_degree[i] > 0) {
+    P[i, ] <- A_dir[i, ] / out_degree[i]
+  } else {
+    P[i, ] <- rep(1 / n_dir, n_dir)
+  }
+}
+P
+rowSums(P)
+```
+
+E and F are dangling nodes: both have zero outgoing degree. Uniform redistribution prevents attention from getting stuck or disappearing.
+
+## Solve the PageRank equation
+
+With a column probability vector, damping $\alpha=0.85$, and uniform teleportation $\mathbf{v}=\mathbf{1}/n$,
+
+$$\mathbf{p}=\alpha P^{\mathsf T}\mathbf{p}+(1-\alpha)\mathbf{v},$$
+
+so
+
+$$(I-\alpha P^{\mathsf T})\mathbf{p}=(1-\alpha)\mathbf{v}.$$
+
+```{r pagerank-solve}
+alpha <- 0.85
+v <- rep(1 / n_dir, n_dir)
+p_manual <- as.numeric(solve(diag(n_dir) - alpha * t(P),
+                             (1 - alpha) * v))
+names(p_manual) <- rownames(A_dir)
+p_package <- page_rank(g_dir, directed = TRUE, damping = alpha,
+                       weights = NA)$vector
+data.frame(node = rownames(A_dir), manual = p_manual, igraph = p_package)
+sum(p_manual)
+round(p_manual, 3)
+round(p_package, 3)
+```
+
+`solve(B, b)` solves $B\mathbf{x}=\mathbf{b}$. It does not require constructing an explicit inverse. Positive teleportation gives every actor a positive PageRank, including F, and makes the probability vector unique.
+
+**Interpret:** E is a sink of nominations and receives relatively high PageRank in this example. Does that mean E controls communication? Which features of the model produced its score?
+
+
+# Optional example: weights as distances
+
+```{r weighted}
+cost_edges <- data.frame(from = c("A", "B", "A"),
+                            to = c("B", "C", "C"),
+                            weight = c(10, 10, 1))
+g_costs <- graph_from_data_frame(cost_edges, directed = FALSE)
+# Assume counts are tie strengths; define separate reciprocal costs.
+E(g_costs)$cost <- 1 / E(g_costs)$weight
+c(unweighted = distances(g_costs, "A", "C", weights = NA)[1, 1],
+  counts_as_cost = distances(g_costs, "A", "C",
+                             weights = E(g_costs)$weight)[1, 1],
+  reciprocal_cost = distances(g_costs, "A", "C",
+                              weights = E(g_costs)$cost)[1, 1])
+```
+
+Under reciprocal costs, A–B–C costs 0.2 and the direct A–C tie costs 1. The “shortest” route now uses two ties. Explain why the reciprocal transformation needs substantive justification. Count weights and cost weights answer different questions.
+
+
+# Optional mathematics: the Laplacian
+
+Let $D$ be the diagonal degree matrix. The undirected graph Laplacian is $L=D-A$.
+
+```{r laplacian}
+D <- diag(rowSums(A))
+L <- D - A
+as.numeric(L %*% rep(1, nrow(A)))
+laplacian_eigenvalues <- eigen(L, symmetric = TRUE)$values
+round(laplacian_eigenvalues, 8)
+components(g)$no
+```
+
+There are two zero eigenvalues, matching the two connected components. Small numerical rounding errors are expected.
+
+For an actor-level vector $\mathbf{z}$,
+
+$$\mathbf{z}^{\mathsf T}L\mathbf{z}
+=\sum_{\{i,j\}\in E}(z_i-z_j)^2.$$
+
+```{r laplacian-energy}
+z <- c(0, 0, 0, 1, 1, 0)
+energy_matrix <- as.numeric(t(z) %*% L %*% z)
+edge_indices <- as_edgelist(g, names = FALSE)
+energy_edges <- sum((z[edge_indices[, 1]] - z[edge_indices[, 2]])^2)
+c(matrix = energy_matrix, edge_sum = energy_edges)
+```
+
+Only C–D joins actors with different values, so the energy equals 1. This gives a mathematical connection between network ties and differences in actor attributes.
+
+## A shifted power iteration
+
+Adding the identity shifts every eigenvalue by 1 while leaving eigenvectors unchanged. This avoids bipartite oscillation on connected undirected graphs with at least one edge.
+
+```{r shifted-power}
+score_shift <- rep(1, nrow(A))
+for (step in seq_len(200)) {
+  score_shift <- as.numeric((A + diag(nrow(A))) %*% score_shift)
+  score_shift <- score_shift / max(score_shift)
+}
+round(score_shift, 3)
+round(x_eigen, 3)
+```
+
+Here the shift is a numerical device. It does not assert that the observed network contains self-ties.
+
+# Your own network question
+
+Choose a question about information exposure, political discussion, or coordination. Specify the actors, boundary, tie definition, direction, and time window. Name one conclusion your data could support and one it could not.
+
+Before interpreting the network, ask whether absent ties could reflect missing observations. Consider whose relationships the data expose, including people who did not supply the data themselves.

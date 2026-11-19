@@ -1,0 +1,729 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amsmath,booktabs,array,tikz,listings}
+\usetikzlibrary{arrows.meta}
+\definecolor{ink}{HTML}{19263B}
+\definecolor{accent}{HTML}{5C5199}
+\definecolor{pale}{HTML}{E9E5F4}
+\definecolor{edge}{HTML}{60758B}
+\setbeamercolor{normal text}{fg=ink,bg=white}
+\setbeamercolor{structure}{fg=accent}
+\setbeamercolor{frametitle}{fg=ink,bg=pale}
+\setbeamercolor{title}{fg=ink}
+\setbeamercolor{footline}{fg=edge}
+\setbeamerfont{frametitle}{size=\large,series=\bfseries}
+\setbeamersize{text margin left=9mm,text margin right=9mm}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize items}[circle]
+\setbeamertemplate{footline}{\hfill\scriptsize\insertframenumber/\inserttotalframenumber\hspace{9mm}\vspace{3mm}}
+\setbeameroption{hide notes}
+% To compile a presenter copy, replace the line above with:
+% \setbeameroption{show notes}
+\lstset{language=R,basicstyle=\ttfamily\small,keywordstyle=\color{accent}\bfseries,
+ stringstyle=\color{accent},showstringspaces=false,columns=fullflexible,
+ keepspaces=true,breaklines=true,frame=none}
+\newcommand{\activity}[1]{{\small\color{accent}\bfseries #1}\par\medskip}
+\newcommand{\network}[2][]{%
+\begin{tikzpicture}[x=0.8cm,y=0.8cm,actor/.style={circle,draw=accent,fill=pale,thick,minimum size=7mm,inner sep=0pt,font=\small\bfseries},tie/.style={draw=edge,thick,#1}]
+\node[actor] (A) at (0,1.8) {A};
+\node[actor] (B) at (2,1.8) {B};
+\node[actor] (C) at (1,0) {C};
+\node[actor] (D) at (3.8,0) {D};
+\node[actor] (E) at (3.8,1.8) {E};
+\node[actor,fill=gray!12] (F) at (5.6,0) {F};
+\foreach \a/\b in {#2}{\draw[tie] (\a) -- (\b);}
+\end{tikzpicture}}
+\title{Social Network Analysis}
+\subtitle{Session 1: Relationships as data}
+\author{Petro Tolochko}
+\institute{University of Vienna\\Advanced Data Analysis III}
+\date{2026}
+\begin{document}
+\begin{frame}{Social Network Analysis}
+\titlepage
+\note{0--3 min. Welcome. This deck is designed for a 180-minute meeting including a 15-minute break. The advice networks are synthetic teaching examples.}
+\end{frame}
+
+\begin{frame}{Today's learning goals}
+\begin{itemize}
+\item Define actors, ties, boundaries, and a time window.
+\medskip
+\item Translate a network into an edge list and adjacency matrix.
+\medskip
+\item Calculate degree and density, and explain their limits.
+\medskip
+\item Create and inspect a small network in R.
+\medskip
+\end{itemize}
+
+\note{3--6 min. Explain that interpretation matters as much as calculation. Ask which outcome is least familiar.}
+\end{frame}
+
+\begin{frame}{Introductions}
+\begin{itemize}
+\item Your name and research interests
+\medskip
+\item Your experience with R and statistics
+\medskip
+\item One relationship you would like to study
+\medskip
+\end{itemize}
+
+\note{6--9 min. Keep introductions brief. With a large class, use pairs and collect a few examples.}
+\end{frame}
+
+\begin{frame}{The course ahead}
+\begin{itemize}
+\item Foundations and graph theory
+\medskip
+\item Network measures, visualization, and communities
+\medskip
+\item Statistical network models and an empirical project
+\medskip
+\end{itemize}
+
+\note{9--12 min. Explain the progression. Do not present the 2025 assessment as confirmed 2026 policy. Confirm current assessment and deadlines separately before class.}
+\end{frame}
+
+\begin{frame}{Reading}
+\textbf{Main textbook}
+\medskip
+
+Borgatti, S.~P., Everett, M.~G., Johnson, J.~C., \& Agneessens, F. (2022).
+\emph{Analyzing Social Networks Using R}. SAGE.
+\begin{itemize}
+\item Social-network concepts, research design, and analysis in R.
+\end{itemize}
+\bigskip
+
+\textbf{Mathematical and R companion}
+\medskip
+
+Kolaczyk, E.~D., \& Cs\'{a}rdi, G. (2020).
+\emph{Statistical Analysis of Network Data with R} (2nd ed.). Springer.
+\begin{itemize}
+\item Mathematical foundations, network measures, and statistical modelling.
+\end{itemize}
+\note{Introduce these as complementary texts. The first is the main course reading; the second provides additional mathematical detail and R examples. Publisher links: https://us2.sagepub.com/en-us/nam/analyzing-social-networks-using-r/book271675 and https://doi.org/10.1007/978-3-030-44129-6.}
+\end{frame}
+
+\begin{frame}{Who can reach a new opportunity?}
+\begin{itemize}
+\item Six researchers have the same recorded attributes.
+\medskip
+\item They have different patterns of contact.
+\medskip
+\item Would information reach everyone in the same way?
+\medskip
+\end{itemize}
+
+\note{15--19 min. Ask students to predict what individual-level data could miss. This is a hypothetical example, not an empirical causal claim.}
+\end{frame}
+
+\begin{frame}{Same actors, different relationships}
+\begin{columns}[c]
+\column{.49\textwidth}\centering\textbf{Network 1}\par\bigskip
+\network{A/B,A/C,B/C,C/D,D/E}
+\column{.49\textwidth}\centering\textbf{Network 2}\par\bigskip
+\network{A/B,B/C,C/D,D/E,E/F}
+\end{columns}\bigskip
+Both: 6 actors, 5 ties. Different routes and reachability.
+\note{19--23 min. Compare two graphs with six nodes and five edges each. Left has an isolate and a bridge; right is a connected path. Ask who could receive a message if it travels only along observed ties. Equal size and density do not imply equal reachability.}
+\end{frame}
+
+\begin{frame}{The relational perspective}
+\begin{itemize}
+\item Attribute data describe actors: education, attitudes, resources.
+\medskip
+\item Relational data describe ties: who contacts, trusts, or advises whom.
+\medskip
+\item SNA asks how patterns of ties relate to social outcomes.
+\medskip
+\end{itemize}
+
+\note{23--27 min. A conventional table can store relational data too. The distinction is the substantive unit and dependence structure, not the file format. Mention that ties sharing actors may be dependent; independent-observation assumptions need care.}
+\end{frame}
+
+\begin{frame}{Why study networks? Information and exposure}
+\textbf{Question:} who could encounter a message, and through whom?
+\begin{itemize}
+\item Nodes: accounts. A directed tie $i\to j$: $i$ sends a message to $j$.
+\medskip
+\item A chain $A\to B\to C$ provides an indirect route from A to C, even without a direct tie.
+\medskip
+\item Counts of messages miss whether they circulate within one group or cross between groups.
+\end{itemize}
+\medskip
+\textcolor{accent}{Application: compare the potential reach of a public-information campaign.}
+\note{27--31 min. Hypothetical application, not an empirical finding. Ties encode observed message sending, not guaranteed attention or persuasion. A route makes transmission possible, not certain. Follow ties would require a different direction convention: messages often travel opposite to follower-to-followed arrows.}
+\end{frame}
+
+\begin{frame}{Why study networks? Political discussion}
+\textbf{Question:} do people with different views talk to one another?
+\begin{itemize}
+\item Nodes: people with recorded political positions. Ties: discussion partners.
+\medskip
+\item Two groups may have the same proportion of each opinion but different patterns of cross-group discussion.
+\medskip
+\item Combining attributes with ties reveals who interacts across political divisions.
+\end{itemize}
+\medskip
+\textcolor{accent}{Discussion is not agreement. A cross-group tie could record cooperation or conflict.}
+\note{31--34 min. Hypothetical comparison. Ask whether a reply, a retweet, and a discussion nomination measure the same relationship. They do not. Similar connected actors may reflect selection, shared circumstances, or social influence; a cross-sectional graph does not distinguish these mechanisms.}
+\end{frame}
+
+\begin{frame}{Why study networks? Coordination and vulnerability}
+\textbf{Question:} where could collaboration become dependent on one relationship?
+\begin{center}\network{A/B,A/C,B/C,C/D,D/E}\end{center}
+\begin{itemize}
+\item C--D is the only tie joining $\{A,B,C\}$ to $\{D,E\}$.
+\item Removing it separates these groups: C--D is a \textbf{bridge}.
+\item This identifies a possible coordination bottleneck in a team or organisation.
+\end{itemize}
+\note{34--38 min. Use the synthetic advice network. Removing A--B would not disconnect A and B because A--C--B remains available. This is the difference between an actor having many ties and a tie being structurally indispensable. Actual organisational vulnerability also depends on unobserved ties and the possibility of making new contacts.}
+\end{frame}
+
+\begin{frame}{Networks as mathematical objects}
+A graph consists of a node set and an edge set:
+\[G=(V,E),\qquad n=|V|,\qquad m=|E|.\]
+\begin{itemize}
+\item Undirected ties are unordered pairs: $\{i,j\}=\{j,i\}$.
+\medskip
+\item Directed ties are ordered pairs: $(i,j)\ne(j,i)$ for $i\ne j$.
+\medskip
+\item Our examples are \textbf{simple graphs}: no self-loops and at most one tie per eligible pair.
+\end{itemize}
+\note{38--42 min. Distinguish a set from its size: E is the edge set, m counts its elements. A directed graph can contain both (A,B) and (B,A); these are distinct ties. Simple directed graphs allow reciprocal ties but not repeated arcs in the same direction.}
+\end{frame}
+
+\begin{frame}{Our running example: an advice network}
+\begin{center}\network{A/B,A/C,B/C,C/D,D/E}\end{center}
+\[E=\{\{A,B\},\{A,C\},\{B,C\},\{C,D\},\{D,E\}\}\]
+\textcolor{accent}{What is distinctive about C, D, and F?}
+\note{42--46 min. Synthetic six-person research group. Initially treat a tie as a confirmed advice relationship without direction. A--B, A--C, B--C, C--D, D--E; F has no observed ties. Later introduce a distinct directed nomination version.}
+\end{frame}
+
+\begin{frame}{Weak ties and access to new information}
+\begin{itemize}
+\item Close contacts often share overlapping social circles.
+\medskip
+\item A tie between circles may provide access to different information.
+\medskip
+\item A weak tie can serve this role, but not every weak tie is a bridge.
+\medskip
+\end{itemize}
+
+\note{46--50 min. Use C--D as a structural bridge in our undirected example. Tie strength has not yet been measured, so do not call it weak based on its position alone. Source: Granovetter (1973), The Strength of Weak Ties, https://doi.org/10.1086/225469. Avoid a universal claim that weak ties spread all information better.}
+\end{frame}
+
+\begin{frame}{The research question defines the network}
+\begin{itemize}
+\item Question: who seeks research advice from whom?
+\medskip
+\item Nodes: all members of this research group.
+\medskip
+\item Tie: person i names person j as a source of advice.
+\medskip
+\item Time window: the previous four weeks.
+\medskip
+\end{itemize}
+
+\note{50--53 min. This introduces the directed nomination version, not a claim that earlier undirected data encoded direction. Make clear that arrow direction must be stated.}
+\end{frame}
+
+\begin{frame}{Directed, undirected, and weighted ties}
+\begin{itemize}
+\item Directed: A names B as a source of advice.
+\medskip
+\item Undirected: A and B co-authored a paper.
+\medskip
+\item Weighted: A reports three advice interactions with B.
+\medskip
+\end{itemize}
+
+\note{53--57 min. Friendship survey nominations may be directed, even if everyday friendship is described as mutual. Weighted ties can represent frequency, intensity, duration, or distance; meanings differ.}
+\end{frame}
+
+\begin{frame}{Arrow direction changes the interpretation}
+\begin{center}\network[-{Stealth[length=2mm]}]{A/B,A/C,B/C,C/D,D/E}\end{center}
+A names B: A is the seeker; B is the advice source.\par\bigskip
+\textcolor{accent}{What would a high in-degree mean here?}
+\note{57--60 min. Directed version has A$\to$B, A$\to$C, B$\to$C, C$\to$D, D$\to$E. Arrow means seeker$\to$source. C is named by two people and names one source. Do not infer frequency from binary degree.}
+\end{frame}
+
+\begin{frame}{A network boundary is a research decision}
+\begin{itemize}
+\item Who is eligible to appear as a node?
+\medskip
+\item Are external advisers included or excluded?
+\medskip
+\item Are isolated actors retained?
+\medskip
+\item Would a different boundary change the conclusion?
+\medskip
+\end{itemize}
+
+\note{60--63 min. Removing F raises undirected density from 5/15 to 5/10 without changing any observed edge. Explain this now, calculate it later. Distinguish whole-network and ego-network designs briefly.}
+\end{frame}
+
+\begin{frame}{No observed tie can mean several things}
+\begin{itemize}
+\item A reported absence of contact
+\medskip
+\item An unanswered survey question
+\medskip
+\item An interaction outside the observed platform or time window
+\medskip
+\end{itemize}
+
+\note{63--67 min. Missing is not automatically zero. Discuss one example of a missing central respondent. Explain that network data can expose relationships involving people who did not provide data themselves.}
+\end{frame}
+
+\begin{frame}{Activity: define a network study}
+\activity{PAIR WORK · 10 MINUTES}
+\begin{itemize}
+\item Choose a question about communication, collaboration, or advice.
+\medskip
+\item Specify nodes, boundary, tie meaning, direction, and time window.
+\medskip
+\item Identify one source of missing data and one privacy concern.
+\medskip
+\end{itemize}
+
+\note{67--77 min. Pairs: choose a question, specify the design, then prepare a brief explanation. Use hypothetical examples rather than collecting classmates' sensitive nominations.}
+\end{frame}
+
+\begin{frame}{Discussion: would your data answer the question?}
+\begin{itemize}
+\item What would one row of your relational data record?
+\medskip
+\item Who or what might your design leave out?
+\medskip
+\item Which conclusion would the data support?
+\medskip
+\end{itemize}
+
+\note{77--80 min. Invite two pairs. Challenge causal claims gently: a pattern of contact does not establish influence. Ask how they would protect identities and relational information.}
+\end{frame}
+
+\begin{frame}{Break}
+\begin{itemize}
+\item 15 minutes
+\medskip
+\item After the break: representations and calculations
+\medskip
+\end{itemize}
+
+\note{80--95 min. Resume with the six-node example.}
+\end{frame}
+
+\begin{frame}{One network, several representations}
+\begin{itemize}
+\item A graph makes patterns visible.
+\medskip
+\item An edge list records observed ties.
+\medskip
+\item An adjacency matrix records all node pairs.
+\medskip
+\item A node list preserves actors with no observed ties.
+\medskip
+\end{itemize}
+
+\note{95--98 min. These are related representations, but a layout alone is not a complete data model and an edge list alone omits isolates.}
+\end{frame}
+
+\begin{frame}{Edge list and node list}
+\begin{columns}[t]
+\column{.48\textwidth}\centering\textbf{Edge list}
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{ll}
+\toprule
+from & to \\
+\midrule
+A & B \\
+A & C \\
+B & C \\
+C & D \\
+D & E \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\column{.48\textwidth}\centering\textbf{Node list}
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{ll}
+\toprule
+node & role \\
+\midrule
+A & researcher \\
+B & researcher \\
+C & researcher \\
+D & researcher \\
+E & researcher \\
+F & researcher \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{columns}
+\note{98--100 min. Undirected version: store each pair once. A node table may contain attributes; retain all six actors, including F.}
+\end{frame}
+
+\begin{frame}{Adjacency matrix: the same undirected network}
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{c|rrrrrr}
+\toprule
+ & A & B & C & D & E & F \\
+\midrule
+A & 0 & 1 & 1 & 0 & 0 & 0 \\
+B & 1 & 0 & 1 & 0 & 0 & 0 \\
+C & 1 & 1 & 0 & 1 & 0 & 0 \\
+D & 0 & 0 & 1 & 0 & 1 & 0 \\
+E & 0 & 0 & 0 & 1 & 0 & 0 \\
+F & 0 & 0 & 0 & 0 & 0 & 0 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\[A_{ij}=1\text{ if }i\text{ and }j\text{ are connected; otherwise }0.\]
+\note{100--103 min. Rows and columns use the same node order. A\_ij=1 if there is a tie. Undirected matrix is symmetric. Diagonal zeros assume no self-loops. Every undirected edge appears twice.}
+\end{frame}
+
+\begin{frame}{What the adjacency matrix encodes}
+For a binary network with a fixed ordering of $n$ nodes,
+\[A\in\{0,1\}^{n\times n},\qquad
+A_{ij}=\begin{cases}1&\text{if a tie runs from }i\text{ to }j,\\0&\text{otherwise.}\end{cases}\]
+\begin{itemize}
+\item No self-loops: $A_{ii}=0$ for every node $i$.
+\medskip
+\item Undirected network: $A_{ij}=A_{ji}$, so $A=A^{\mathsf T}$.
+\medskip
+\item An isolate has an all-zero row \emph{and} an all-zero column.
+\end{itemize}
+\note{103--106 min. Connect each statement to the displayed six-person matrix. Transpose swaps rows and columns. A directed network need not be symmetric, but it can be if every tie is reciprocated. A zero row alone in a directed network means zero out-degree, not necessarily isolation.}
+\end{frame}
+
+\begin{frame}{Activity: change the representation}
+\activity{INDIVIDUAL, THEN PAIRS · 7 MINUTES}
+\begin{itemize}
+\item Use A--B, A--C, B--C, C--D, D--E and the node set A--F.
+\medskip
+\item Write the edge list and adjacency matrix without copying.
+\medskip
+\item Now direct each listed tie from its first node to its second.
+\medskip
+\item Which matrix entries change? What happens to F?
+\medskip
+\end{itemize}
+
+\note{106--113 min. Allow most of this time for work, then compare answers. Directed answer is on the next slide. Check students preserve the all-zero row and column for F.}
+\end{frame}
+
+\begin{frame}{Answer: the directed advice matrix}
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{c|rrrrrr}
+\toprule
+ & A & B & C & D & E & F \\
+\midrule
+A & 0 & 1 & 1 & 0 & 0 & 0 \\
+B & 0 & 0 & 1 & 0 & 0 & 0 \\
+C & 0 & 0 & 0 & 1 & 0 & 0 \\
+D & 0 & 0 & 0 & 0 & 1 & 0 \\
+E & 0 & 0 & 0 & 0 & 0 & 0 \\
+F & 0 & 0 & 0 & 0 & 0 & 0 \\
+\bottomrule
+\end{tabular}
+\end{center}
+\begin{center}\textcolor{accent}{\textbf{Rows send ties. Columns receive ties.}}\end{center}
+\note{113--116 min. Convention: row=sender (seeker), column=receiver (advice source). A$\to$B occupies row A, column B. Row sums are out-degree; column sums are in-degree.}
+\end{frame}
+
+\begin{frame}{Binary ties and weighted ties answer different questions}
+Let $W_{ij}$ be the number of advice interactions from $i$ to $j$.
+\[A_{ij}=\mathbf{1}\{W_{ij}>0\}.\]
+The indicator is 1 when at least one interaction occurs, and 0 otherwise.
+\medskip
+\begin{itemize}
+\item If $W_{AB}=3$ and $W_{AC}=1$, A has two outgoing ties.
+\medskip
+\item A's outgoing interaction total is $3+1=4$.
+\end{itemize}
+\[\underbrace{\sum_j A_{Aj}=2}_{\text{out-degree}}\qquad\ne\qquad
+\underbrace{\sum_j W_{Aj}=4}_{\text{out-strength}}\]
+\note{116--119 min. Synthetic counts illustrate binarisation. Here row A has no other positive weights. Degree counts distinct partners; strength sums interaction weights. Weight need not always mean frequency, so define its meaning before interpreting strength.}
+\end{frame}
+
+\begin{frame}{Degree as a row sum or a column sum}
+\begin{align*}
+\text{Undirected:}\quad k_i&=\sum_{j=1}^{n} A_{ij},\\[.5ex]
+\text{Directed:}\quad k_i^{\mathrm{out}}&=\sum_{j=1}^{n} A_{ij},
+&k_i^{\mathrm{in}}&=\sum_{j=1}^{n} A_{ji}.
+\end{align*}
+\textbf{Read the subscripts:} hold actor $i$ fixed and sum over all possible partners $j$.
+\medskip
+\begin{itemize}
+\item Undirected C: $k_C=1+1+0+1+0+0=3$.
+\item Directed C: $k_C^{\mathrm{out}}=1$ and $k_C^{\mathrm{in}}=2$.
+\end{itemize}
+\note{119--121 min. Point to row C and column C in the previous matrices. Outgoing ties correspond to advice seeking; incoming ties correspond to being named as a source. With our simple, loopless binary graphs, each in-degree and out-degree lies between 0 and n-1.}
+\end{frame}
+
+\begin{frame}{Why the degrees add up to twice the ties}
+Each undirected tie has \textbf{two endpoints}, contributing 1 to each endpoint's degree:
+\[\sum_{i=1}^{n}k_i=\sum_i\sum_j A_{ij}=2m.\]
+In our graph:
+\[2+2+3+2+1+0=10=2\times5.\]
+Each directed tie contributes once to an out-degree and once to an in-degree:
+\[\sum_i k_i^{\mathrm{out}}=m,\qquad\sum_i k_i^{\mathrm{in}}=m.\]
+\textcolor{accent}{These identities are useful checks on data and calculations.}
+\note{121--124 min. This is the handshaking identity for an undirected graph. Do not divide by two when counting directed arcs from the matrix. For directed graphs, the sum of total degree (in plus out) is 2m. Restrict discussion to the simple graphs used here.}
+\end{frame}
+
+\begin{frame}{Counting possible ties}
+With $n$ nodes, each actor has $n-1$ possible partners.
+\begin{align*}
+\text{Directed:}\quad m_{\max}&=n(n-1),\\[1ex]
+\text{Undirected:}\quad m_{\max}&=\binom{n}{2}=\frac{n(n-1)}{2}.
+\end{align*}
+\begin{itemize}
+\item Direction matters: $A\to B$ and $B\to A$ are two possible arcs.
+\medskip
+\item Without direction, A--B and B--A are the same tie: divide by two.
+\end{itemize}
+\medskip
+For six nodes: $30$ possible directed ties or $15$ undirected ties.
+\note{124--127 min. No self-loops and no repeated edges. Explain choose notation as the number of ways of selecting two different actors without ordering them. Adding a seventh actor creates six new possible undirected ties.}
+\end{frame}
+
+\begin{frame}{Density: the proportion of eligible pairs connected}
+\[D=\frac{m}{m_{\max}}\qquad\Longrightarrow\qquad
+\begin{cases}
+D_{\mathrm{undirected}}=\dfrac{2m}{n(n-1)},\\[1.5ex]
+D_{\mathrm{directed}}=\dfrac{m}{n(n-1)}.
+\end{cases}\]
+\begin{itemize}
+\item With $n=6$ and $m=5$: $D_u=5/15=1/3$, but $D_d=5/30=1/6$.
+\medskip
+\item $D=0$ means no ties; $D=1$ means every eligible tie exists.
+\medskip
+\item Binary density counts ties, not the sum of interaction weights.
+\end{itemize}
+{\footnotesize Assumptions: simple graph, no self-loops, $n\geq2$.}
+\note{127--129 min. The numerator is five in both versions, but the denominator differs. In an undirected graph, one possible pair is an unordered pair; in the directed graph, it is an ordered pair. Do not interpret different densities as evidence that changing an arrow alone changes communication intensity.}
+\end{frame}
+
+\begin{frame}{Activity: describe the six-person group}
+\activity{SMALL GROUPS · 8 MINUTES}
+\begin{itemize}
+\item Undirected version: calculate each node's degree.
+\medskip
+\item Calculate the number of possible ties and the density.
+\medskip
+\item For the directed version, find C's in-degree and out-degree.
+\medskip
+\item What changes if F is accidentally omitted?
+\medskip
+\end{itemize}
+
+\note{129--137 min. Let students calculate before showing answers. Ask one pair to explain the denominator and another to interpret C's directed degree.}
+\end{frame}
+
+\begin{frame}{Answer: degree, density, and the missing isolate}
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{ll}
+\toprule
+Quantity & Result \\
+\midrule
+Undirected degrees A--F & 2, 2, 3, 2, 1, 0 \\
+Undirected possible ties & $6\times5/2=15$ \\
+Undirected density & $5/15\approx0.333$ \\
+Directed C: in / out & 2 / 1 \\
+Density after dropping F & $5/10=0.500$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\note{137--140 min. Undirected degrees sum to 10 = 2m. Directed in-degree and out-degree each sum to m=5. Omitting F raises density without adding a relationship.}
+\end{frame}
+
+\begin{frame}{Average degree connects local and global measures}
+For a simple undirected network,
+\[\bar{k}=\frac{1}{n}\sum_i k_i=\frac{2m}{n}.
+\qquad D=\frac{2m}{n(n-1)}=\frac{\bar{k}}{n-1}.\]
+\begin{itemize}
+\item Running example: $\bar{k}=10/6\approx1.67$ and $D=(10/6)/5=1/3$.
+\medskip
+\item Same average degree, different size: if $\bar{k}=2$, density is $2/5$ for $n=6$ but $2/99$ for $n=100$.
+\end{itemize}
+\medskip
+\textcolor{accent}{A lower density need not mean fewer contacts per person.}
+\note{140--142 min. Both hypothetical networks with average degree two are feasible, for example cycles. Density compares observed ties with all possible pairs; the pool of possible partners grows with n. Average degree does not describe variation among actors or connectivity. For directed graphs, mean in-degree and mean out-degree both equal m/n.}
+\end{frame}
+
+\begin{frame}{What these measures can and cannot tell us}
+\begin{itemize}
+\item Degree counts ties; it does not establish influence.
+\medskip
+\item Equal density can coexist with different paths and components.
+\medskip
+\item Density comparisons depend on network size and boundaries.
+\medskip
+\end{itemize}
+
+\note{142--145 min. Return to the two networks at the start. Optional extension: mean degree = 2m/n = density $\times$ (n-1) for simple undirected networks. This is a relation between averages, not a claim about the full degree distribution.}
+\end{frame}
+
+\begin{frame}{R practical: build and inspect the network}
+\begin{itemize}
+\item Open code/SNA\_Practical\_01\_02.Rmd.
+\medskip
+\item Run the setup and create the undirected network.
+\medskip
+\item Check that F appears and has degree zero.
+\medskip
+\item Predict the output before running each calculation.
+\medskip
+\end{itemize}
+
+\note{145--148 min. Allow a fallback: students without working R pair with someone who has it. Notebook needs igraph only. Install packages before class where possible.}
+\end{frame}
+
+\begin{frame}[fragile]{A minimal network in R}
+\begin{lstlisting}
+library(igraph)
+
+nodes <- data.frame(name = LETTERS[1:6])
+edges <- data.frame(
+  from = c("A", "A", "B", "C", "D"),
+  to   = c("B", "C", "C", "D", "E")
+)
+g <- graph_from_data_frame(
+  edges, directed = FALSE, vertices = nodes
+)
+\end{lstlisting}
+\note{148--151 min. Explain why vertices=nodes is essential. Do not spend time on advanced visualization packages.}
+\end{frame}
+
+\begin{frame}{Practical task 1: check your answers}
+\begin{itemize}
+\item Inspect the edge list and adjacency matrix.
+\medskip
+\item Compute degree(g) and edge\_density(g).
+\medskip
+\item Compare the results with your hand calculations.
+\medskip
+\item Explain why the sum of undirected degrees is 2m.
+\medskip
+\end{itemize}
+
+\note{151--157 min. Expected: n=6, m=5, degree=(2,2,3,2,1,0), density=1/3. See notebook for commands and checks.}
+\end{frame}
+
+\begin{frame}{Practical task 2: change one relationship}
+\begin{itemize}
+\item Predict what happens when E--F is added.
+\medskip
+\item Add the tie and recompute degree and density.
+\medskip
+\item Which actors' degree changes?
+\medskip
+\item How does F's ability to reach others change?
+\medskip
+\end{itemize}
+
+\note{157--163 min. Answer: m=6, density=6/15=.4; E changes 1$\to$2, F changes 0$\to$1. Network becomes connected. Density alone does not express this qualitative change.}
+\end{frame}
+
+\begin{frame}{Practical task 3: direction and interpretation}
+\begin{itemize}
+\item Create the directed version of the original edge list.
+\medskip
+\item Compute in-degree and out-degree.
+\medskip
+\item Who is named most often as an advice source?
+\medskip
+\item Would reversing every arrow change density?
+\medskip
+\end{itemize}
+
+\note{163--169 min. C has highest in-degree=2; A highest out-degree=2. Reversing arrows preserves density and swaps in/out degree. Original graph has no E--F addition in this task.}
+\end{frame}
+
+\begin{frame}{One graph can have several layouts}
+\begin{itemize}
+\item Compare the fixed layout and a circular layout in the notebook.
+\medskip
+\item Which properties stay the same?
+\medskip
+\item Which visual impressions change?
+\medskip
+\item Distance on the page is not automatically social distance.
+\medskip
+\end{itemize}
+
+\note{169--172 min. Layout changes do not change adjacency, degree, or density. The fixed arrangement was chosen for teaching and does not encode geography.}
+\end{frame}
+
+\begin{frame}{Classic results need careful interpretation}
+\begin{itemize}
+\item Short acquaintance chains were found among completed chains.
+\medskip
+\item Hubs show unequal degree; a power law is a stronger claim.
+\medskip
+\item A network pattern alone does not establish a causal process.
+\medskip
+\end{itemize}
+
+\note{172--175 min. Optional brief context rather than a new theory unit. Travers \& Milgram (1969): 64 completed chains from 296 starters; mean 5.2 intermediaries in completed chains. This does not establish universal six-step reachability. https://snap.stanford.edu/class/cs224w-readings/travers69smallworld.pdf. Broido \& Clauset (2019), Scale-free networks are rare: https://doi.org/10.1038/s41467-019-08746-5. Preferential attachment is one generative model, not established by a hub-shaped plot.}
+\end{frame}
+
+\begin{frame}{Exit question}
+\begin{itemize}
+\item A group has six actors and five undirected ties.
+\medskip
+\item A colleague imports only the edge list and reports five actors.
+\medskip
+\item What probably happened, and why does it affect density?
+\medskip
+\end{itemize}
+
+\note{175--177 min. Individual written response. Expected: an isolate may be missing; omitting it changes the denominator from 15 to 10 and raises density from .333 to .5. Five actors is consistent with the running example, but in a real dataset investigate rather than assume.}
+\end{frame}
+
+\begin{frame}{What you should now be able to do}
+\begin{itemize}
+\item Define a network study in terms of actors and relationships.
+\medskip
+\item Move between a graph, an edge list, and a matrix.
+\medskip
+\item Calculate and interpret degree and density.
+\medskip
+\item Preserve isolates when building a network in R.
+\medskip
+\end{itemize}
+
+\note{177--180 min. Ask students to name one remaining uncertainty. Next class: paths, components, and graph structure.}
+\end{frame}
+
+\begin{frame}{Reading and sources}
+\small
+\begin{itemize}
+\item Granovetter (1973). \emph{The Strength of Weak Ties}.\\
+\href{https://doi.org/10.1086/225469}{doi:10.1086/225469}
+\medskip
+\item Travers \& Milgram (1969). \emph{An Experimental Study of the Small World Problem}.\\
+\href{https://snap.stanford.edu/class/cs224w-readings/travers69smallworld.pdf}{Original study}
+\medskip
+\item Broido \& Clauset (2019). \emph{Scale-free networks are rare}.\\
+\href{https://doi.org/10.1038/s41467-019-08746-5}{doi:10.1038/s41467-019-08746-5}
+\medskip
+\item Course reading: Wasserman \& Faust (1994), ch.~1; Borgatti et al. (2009), \href{https://doi.org/10.1126/science.1165821}{Network Analysis in the Social Sciences}.
+\end{itemize}
+\note{Reference slide, outside timed teaching. Granovetter https://doi.org/10.1086/225469; Travers \& Milgram https://snap.stanford.edu/class/cs224w-readings/travers69smallworld.pdf; Broido \& Clauset https://doi.org/10.1038/s41467-019-08746-5; Borgatti et al. https://doi.org/10.1126/science.1165821. Reworked from ADAIII\_2025/meeting\_slides/ADA\_III\_Meeting\_01.pdf and the 2025 first-session notebook. All network data and diagrams in this deck are synthetic instructional examples.}
+\end{frame}
+\end{document}

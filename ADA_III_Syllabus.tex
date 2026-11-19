@@ -1,0 +1,114 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=0.85in]{geometry}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{needspace}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{3pt}
+\setlist[itemize]{topsep=3pt,itemsep=3pt,parsep=0pt}
+\newcommand{\session}[4]{\needspace{7\baselineskip}\textbf{Session #1} --- #2\par
+\hspace*{1em}\begin{minipage}{\dimexpr\linewidth-1em\relax}#3\par
+\textit{Readings: #4}\end{minipage}\par\smallskip}
+\title{\textbf{Syllabus: Social Network Analysis}}
+\author{\textit{Petro Tolochko}\\
+\textit{Department of Communication, University of Vienna}\\
+Email: \texttt{petro.tolochko@univie.ac.at}}
+\date{Semester: Winter 2026/27}
+\begin{document}
+\maketitle
+
+\section*{Course Description}
+This course introduces the theory and methods of \textbf{social network analysis (SNA)} in computational social science. Networks provide a framework for studying relationships among people, organisations, and media. Examples include advice seeking, political discussion, information exposure, and collaboration.
+
+The course combines conceptual and mathematical foundations with practical work in \textbf{R}. Students learn to define network studies, prepare relational data, describe and visualise network structure, and evaluate observed patterns using statistical comparisons. The course concludes with an introduction to exponential random graph models (ERGMs) and a small empirical project.
+
+\section*{Learning Objectives}
+By the end of the course, students will be able to:
+\begin{itemize}
+\item Formulate network research questions and define actors, ties, boundaries, and observation periods.
+\item Represent networks as graphs, edge lists, and adjacency matrices.
+\item Calculate and interpret connectivity, centrality, cohesion, and mixing measures.
+\item Prepare and visualise network data in R, accounting for isolates and missing observations.
+\item Detect communities and assess the limitations of algorithmic partitions.
+\item Use null models and permutation tests to evaluate network patterns.
+\item Fit and interpret a basic ERGM and assess its goodness of fit.
+\item Conduct and communicate a reproducible empirical network analysis.
+\end{itemize}
+
+\needspace{6\baselineskip}
+\section*{Preparation and Format}
+Students should have basic knowledge of R and introductory statistics. Mathematical explanations build on sets, matrices, sums, and probability. Each meeting combines discussion, worked examples, and practical exercises. Install R, RStudio, and the \texttt{igraph} package before the practical sessions; additional packages will be introduced as needed.
+
+\section*{Schedule}
+
+\session{1}{Relationships as Data}{
+Why study social networks? Research design, nodes, ties, boundaries, direction, weights, and missing data. Graphs, edge lists, adjacency matrices, degree, density, and average degree.\par
+\textit{Practical:} Build an advice network in R; connect matrix operations to measures; examine a missing isolate.
+}{Borgatti et al., selected sections of Chs.~1--3.}
+
+\session{2}{Connectivity, Centrality, and Social Position}{
+Paths, shortest paths, components, bridges, and reachability. Degree, harmonic/closeness and betweenness centrality; introduction to eigenvector centrality and PageRank.\par
+\textit{Practical:} Compare rankings and examine direction, disconnectedness, and actor removal.
+}{Borgatti et al., Chs.~8--9; Kolaczyk \& Cs\'{a}rdi, selected sections of Ch.~4.}
+
+\session{3}{Network Data and Visualisation}{
+Data collection and preparation: identifiers, duplicates, isolates, missing ties, and boundaries. Layouts, visual encodings, and uncertainty. Introduction to two-mode networks and projection.\par
+\textit{Practical:} Clean relational tables and produce a figure answering a research question. \textit{After this session: Assignment 1 and project proposal.}
+}{Borgatti et al., selected sections of Chs.~4--5, 7, and 13.}
+
+\session{4}{Cohesion, Communities, and Mixing}{
+Triangles, clustering, transitivity, homophily, and assortativity. Communities versus components and attribute groups. Modularity, Louvain, Leiden, and their limitations.\par
+\textit{Practical:} Compare communities with actor attributes and assess sensitivity to algorithm settings.
+}{Borgatti et al., selected sections of Chs.~10--11.}
+
+\session{5}{From Description to Statistical Evidence}{
+Dependence in network data. Null models, simulation, and permutation tests. What randomisations preserve and which questions they answer. Selection, influence, and shared circumstances.\par
+\textit{Practical:} Evaluate cross-group ties or clustering under a justified null model. \textit{After this session: Assignment 2.}
+}{Borgatti et al., Ch.~14; Kolaczyk \& Cs\'{a}rdi, selected sections of Ch.~5.}
+
+\session{6}{Modelling Tie Formation: Introduction to ERGMs}{
+Networks as outcomes. ERGM formulation; edges, reciprocity, nodal attributes, homophily, and transitivity. Conditional interpretation, simulation, goodness of fit, and degeneracy.\par
+\textit{Practical:} Fit a basic ERGM and compare observed and simulated network features.
+}{Borgatti et al., ERGM sections of Ch.~15; Lusher et al., selected introductory sections.}
+
+\session{7}{Student Projects and Synthesis}{
+Project presentations, peer feedback, and time to improve the final report. Scope and limitations of descriptive analysis and network models. Outlook on temporal and multilayer networks.
+}{Readings selected for individual projects.}
+
+\section*{Assessment}
+\begin{itemize}
+\item Participation and short exercises: \textbf{20\%}.
+\item Two practical assignments: \textbf{30\%} (15\% each).
+\item Final project, including presentation and reproducible report: \textbf{50\%}.
+\end{itemize}
+\textbf{Assignment 1:} Prepare network data, produce an interpretable visualisation, and compare centrality measures. Explain how the network definition shapes the conclusions.
+
+\textbf{Assignment 2:} Analyse communities and carry out a permutation test using a justified null model. Interpret both the result and its limitations.
+
+\textbf{Final project:} Develop a focused research question and analyse a manageable network dataset. Submit a brief proposal after Session 3 specifying the question, data source, nodes, ties, boundary, and ethical considerations. A curated dataset will be available as an alternative to collecting new data. Present the project in Session 7 and submit a short report with reproducible R code. An ERGM is optional and should be used only when appropriate to the question and data. Exact submission dates will be announced separately.
+
+\section*{Readings}
+\textbf{Main textbook:}
+\begin{itemize}
+\item Borgatti, S.~P., Everett, M.~G., Johnson, J.~C., \& Agneessens, F. (2022). \textit{Analyzing Social Networks Using R}. SAGE.
+\end{itemize}
+\textbf{Mathematical and R companion:}
+\begin{itemize}
+\item Kolaczyk, E.~D., \& Cs\'{a}rdi, G. (2020). \textit{Statistical Analysis of Network Data with R} (2nd ed.). Springer.
+\end{itemize}
+\textbf{Supplementary reading for ERGMs:}
+\begin{itemize}
+\item Lusher, D., Koskinen, J., \& Robins, G. (Eds.). (2013). \textit{Exponential Random Graph Models for Social Networks: Theory, Methods, and Applications}. Cambridge University Press.
+\end{itemize}
+Additional articles and R notebooks will accompany individual sessions.
+
+\section*{Academic Integrity and Ethics}
+Students must acknowledge sources and report their work honestly. Handle relational data responsibly: protect identities, consider consent and privacy, and avoid unsupported claims about individuals or groups. Network records can reveal information about people who did not supply the data themselves.
+
+\needspace{7\baselineskip}
+\section*{Use of Generative AI Tools}
+Generative AI tools may support learning, coding, and writing, but their use must be acknowledged in a code comment, footnote, or short reflection. Students remain responsible for the accuracy, originality, and reproducibility of submitted work and must be able to explain their code, methods, and conclusions.
+\end{document}
